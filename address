@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Cardano Wallet Integration</title>
+    <script src="https://unpkg.com/@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib.js"></script>
+    <script>
+      async function connectWallet() {
+        try {
+          const walletApi = await window.cardano.eternl.enable();
+          console.log("Wallet connected:", walletApi);
+          document.getElementById("connectButton").style.display = "none";
+          document.getElementById("transactionForm").style.display = "block";
+        } catch (error) {
+          console.error("Failed to connect wallet:", error);
+        }
+      }
+
+      async function submitTransaction(event) {
+        event.preventDefault();
+
+        const recipientAddress = "addr1qx2kd28nq8ac5prwg32hhvudlcxp4tqft8r60f7vz2fqwjqwgus8uqfvxnqwgx5p5z5v5j5zv5j5zv5j5zv5j5zv5j5zv5j5zv5j5zv5j5";
+        const lovelaceAmount = 30000000; // 30 ADA in lovelace
+
+        try {
+          const walletApi = await window.cardano.eternl.enable();
+          const changeAddress = await walletApi.getChangeAddress();
+          const utxos = await walletApi.getUtxos();
+
+          const txBuilder = CardanoSerializationLib.TransactionBuilder.new(CardanoSerializationLib.LinearFee.new(CardanoSerializationLib.BigNum.from_str("44"), CardanoSerializationLib.BigNum.from_str("155381")), CardanoSerializationLib.BigNum.from_str("1000000"), CardanoSerializationLib.BigNum.from_str("500000000"), CardanoSerializationLib.BigNum.from_str("2000000"));
+
+          const outputs = CardanoSerializationLib.TransactionOutputs.new();
+          outputs.add(CardanoSerializationLib.TransactionOutput.new(CardanoSerializationLib.Address.from_bech32(recipientAddress), CardanoSerializationLib.Value.new(CardanoSerializationLib.BigNum.from_str(lovelaceAmount.toString()))));
+
+          const totalLovelace = utxos.reduce((sum, utxo) => sum + utxo.output().amount().coin().to_str(), 0);
+          const changeLovelace = totalLovelace - lovelaceAmount;
+
+          if (changeLovelace > 0) {
+            outputs.add(CardanoSerializationLib.TransactionOutput.new(CardanoSerializationLib.Address.from_bech32(changeAddress), CardanoSerializationLib.Value.new(CardanoSerializationLib.BigNum.from_str(changeLovelace.toString()))));
+          }
+
+          for (const utxo of utxos) {
+            txBuilder.add_input(utxo.output().address(), utxo.input(), utxo.output().amount());
+          }
+
+          txBuilder.set_outputs(outputs);
+
+          const txBody = txBuilder.build();
+          const transaction = CardanoSerializationLib.Transaction.new(txBody, CardanoSerializationLib.TransactionWitnessSet.new());
+
+          const signedTx = await walletApi.signTx(transaction);
+          const txHash = await walletApi.submitTx(signedTx);
+
+          console.log("Transaction submitted. Hash:", txHash);
+          alert("Transaction submitted successfully!");
+        } catch (error) {
+          console.error("Failed to submit transaction:", error);
+          alert("Failed to submit transaction. Please try again.");
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Cardano Wallet Integration</h1>
+    <button id="connectButton" onclick="connectWallet()">Connect Wallet</button>
+
+    <form id="transactionForm" style="display: none" onsubmit="submitTransaction(event)">
+      <p>Recipient Address: addr1qx2kd28nq8ac5prwg32hhvudlcxp4tqft8r60f7vz2fqwjqwgus8uqfvxnqwgx5p5z5v5j5zv5j5zv5j5zv5j5zv5j5zv5j5zv5j5zv5j5</p>
+      <p>Amount: 30 ADA</p>
+      <button type="submit">Submit Transaction</button>
+    </form>
+  </body>
+</html>
